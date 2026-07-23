@@ -32,18 +32,7 @@ jobs:
         echo "DATE=$DATE" >> $GITHUB_ENV
         echo "VERSION=v$DATE" >> $GITHUB_ENV
 
-    # 2. 自动修改 build.gradle 中的 versionName
-    - name: Update versionName in build.gradle
-      run: |
-        # 针对传统 Groovy 格式 (build.gradle):
-        sed -i -E 's/versionName "[^"]*"/versionName "'"$VERSION"'"/' app/build.gradle
-        
-        # 如果你的项目使用的是 Kotlin DSL (build.gradle.kts)，请注释掉上面那行，取消注释下面这行：
-        # sed -i -E 's/versionName = "[^"]*"/versionName = "'"$VERSION"'"/' app/build.gradle.kts
-        
-        echo "当前 versionName 已修改为:"
-        grep versionName app/build.gradle
-
+    # 2. versionName 由 build.gradle.kts 通过 System.getenv("VERSION") 自动读取
     - name: Build Release APK
       run: ./gradlew assembleRelease
 
