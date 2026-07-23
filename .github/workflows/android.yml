@@ -39,10 +39,11 @@ jobs:
     # 3. 将生成的 APK 重命名为 v年月日.apk
     - name: Rename APK
       run: |
-        # 在你自定义的 app/release 目录下找到 apk 并重命名
-        find app/release -name "*.apk" -exec mv {} app/release/$VERSION.apk \;
+        # APK 默认输出路径为 app/build/outputs/apk/release/
+        APK_DIR=app/build/outputs/apk/release
+        find "$APK_DIR" -name "*.apk" -exec mv {} "$APK_DIR/$VERSION.apk" \;
         echo "重命名完成，当前文件列表:"
-        ls -la app/release/
+        ls -la "$APK_DIR/"
 
     - name: Create GitHub Release and Upload Assets
       if: github.event_name == 'push'
@@ -53,6 +54,6 @@ jobs:
         generate_release_notes: true
         # 上传重命名后的精确文件
         files: |
-          app/release/${{ env.VERSION }}.apk
+          app/build/outputs/apk/release/${{ env.VERSION }}.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
