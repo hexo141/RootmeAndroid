@@ -2,33 +2,34 @@ package com.hexo141.rootmeandroid.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.hexo141.rootmeandroid.R
 
-// Set of Material typography styles to start with
+// 全局字体：JetBrains Mono Regular
+val AppFontFamily = FontFamily(
+    Font(R.font.jetbrains_mono_regular, FontWeight.Normal)
+)
+
+// 以 M3 默认 Typography 为基底，把所有样式替换成 AppFontFamily
+private val DefaultTypography = Typography()
+
 val Typography = Typography(
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp
-    )
-    /* Other default text styles to override
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    )
-    */
+    displayLarge = DefaultTypography.displayLarge.copy(fontFamily = AppFontFamily),
+    displayMedium = DefaultTypography.displayMedium.copy(fontFamily = AppFontFamily),
+    displaySmall = DefaultTypography.displaySmall.copy(fontFamily = AppFontFamily),
+    headlineLarge = DefaultTypography.headlineLarge.copy(fontFamily = AppFontFamily),
+    headlineMedium = DefaultTypography.headlineMedium.copy(fontFamily = AppFontFamily),
+    headlineSmall = DefaultTypography.headlineSmall.copy(fontFamily = AppFontFamily),
+    titleLarge = DefaultTypography.titleLarge.copy(fontFamily = AppFontFamily),
+    titleMedium = DefaultTypography.titleMedium.copy(fontFamily = AppFontFamily),
+    titleSmall = DefaultTypography.titleSmall.copy(fontFamily = AppFontFamily),
+    bodyLarge = DefaultTypography.bodyLarge.copy(fontFamily = AppFontFamily),
+    bodyMedium = DefaultTypography.bodyMedium.copy(fontFamily = AppFontFamily),
+    bodySmall = DefaultTypography.bodySmall.copy(fontFamily = AppFontFamily),
+    labelLarge = DefaultTypography.labelLarge.copy(fontFamily = AppFontFamily),
+    labelMedium = DefaultTypography.labelMedium.copy(fontFamily = AppFontFamily),
+    labelSmall = DefaultTypography.labelSmall.copy(fontFamily = AppFontFamily)
 )
