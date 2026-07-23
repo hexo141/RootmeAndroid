@@ -45,4 +45,33 @@
     <string name="shizuku_btn_get">Get Shizuku</string>
     <string name="shizuku_btn_open">Open Shizuku</string>
     <string name="shizuku_btn_recheck">Re-check</string>
+
+    <!-- Hardware (dialog) -->
+    <string name="hardware_btn_show">View Hardware Info</string>
+    <string name="hardware_dialog_title">Hardware Info</string>
+
+    <!-- Exploit -->
+    <string name="exploit_cve_2026_43499">CVE-2026-43499</string>
+    <string name="exploit_device_list_title">Select Device</string>
+    <string name="exploit_fetching_devices">Fetching device list...</string>
+    <string name="exploit_downloading_so">Downloading %1$s...</string>
+    <string name="exploit_running_so">Running %1$s...</string>
+    <string name="exploit_root_success">Root access obtained</string>
+    <string name="exploit_root_failed">Failed to obtain root access</string>
+    <string name="exploit_log_title">%1$s Log</string>
+    <string name="exploit_btn_start">Start</string>
+    <string name="exploit_btn_run">Run</string>
+    <string name="exploit_btn_download">Download</string>
+
+    <!-- App update -->
+    <string name="update_available_title">New version available</string>
+    <string name="update_available_message_format">Version %1$s is available. Download and install now?</string>
+    <string name="update_btn_download">Download &amp; Install</string>
+    <string name="update_btn_cancel">Cancel</string>
+    <string name="update_btn_close">Close</string>
+    <string name="update_downloading_title">Downloading</string>
+    <string name="update_paused_title">Paused</string>
+    <string name="update_btn_pause">Pause</string>
+    <string name="update_btn_resume">Resume</string>
+    <string name="update_download_error_format">Download failed: %1$s</string>
 </resources>

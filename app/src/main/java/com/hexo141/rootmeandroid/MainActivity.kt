@@ -32,22 +32,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -61,10 +67,14 @@ import androidx.compose.ui.unit.sp
 import android.provider.Settings as SystemSettings
 import com.hexo141.rootmeandroid.ui.theme.RootmeAndroidTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -89,14 +99,96 @@ enum class NavDest(val labelRes: Int, val iconRes: Int) {
     About(R.string.nav_about, R.drawable.ic_nav_about)
 }
 
+/// 更新检查状态：检测中 / 已是最新 / 有新版本
+enum class UpdateCheckState { CHECKING, LATEST, AVAILABLE }
+
 @Composable
 fun AppRoot() {
     val context = LocalContext.current
     // Shizuku 连接状态：未就绪时显示配对界面
     var shizukuReady by remember { mutableStateOf(checkShizukuState(context) == ShizukuState.READY) }
 
+    // 应用更新检查状态
+    var updateInfo by remember { mutableStateOf<ReleaseInfo?>(null) }
+    var updateCheckState by remember { mutableStateOf(UpdateCheckState.CHECKING) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var isPaused by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // 启动时后台请求 GitHub latest release
+    LaunchedEffect(Unit) {
+        val currentVersion = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        }.getOrNull() ?: "1.0"
+        val release = checkLatestRelease()
+        if (release != null && isVersionNewer(currentVersion, release.tagName)) {
+            updateInfo = release
+            updateCheckState = UpdateCheckState.AVAILABLE
+            showUpdateDialog = true
+        } else {
+            updateCheckState = UpdateCheckState.LATEST
+        }
+    }
+
+    // 启动或继续下载（断点续传）
+    fun startDownload() {
+        val release = updateInfo ?: return
+        showUpdateDialog = false
+        isDownloading = true
+        isPaused = false
+        downloadError = null
+        val apkFile = File(context.cacheDir, release.apkName)
+        downloadJob = scope.launch {
+            try {
+                downloadApkResumable(release.apkUrl, apkFile) { progress ->
+                    downloadProgress = progress
+                }
+                isDownloading = false
+                installApk(context, apkFile)
+            } catch (e: CancellationException) {
+                throw e // 暂停或取消，不显示错误
+            } catch (e: Exception) {
+                isDownloading = false
+                downloadError = e.message ?: e.javaClass.simpleName
+            }
+        }
+    }
+
+    // 暂停下载
+    fun pauseDownload() {
+        downloadJob?.cancel()
+        isPaused = true
+    }
+
+    // 取消下载并清理
+    fun cancelDownload() {
+        downloadJob?.cancel()
+        isDownloading = false
+        isPaused = false
+        downloadProgress = 0f
+        updateInfo?.let { File(context.cacheDir, it.apkName).delete() }
+    }
+
     if (!shizukuReady) {
         ShizukuConnectionPage(onConnected = { shizukuReady = true })
+        UpdateDialogs(
+            updateInfo = updateInfo,
+            showUpdateDialog = showUpdateDialog,
+            isDownloading = isDownloading,
+            isPaused = isPaused,
+            downloadProgress = downloadProgress,
+            downloadError = downloadError,
+            onConfirmDownload = { startDownload() },
+            onDismissUpdate = { showUpdateDialog = false },
+            onDismissError = { downloadError = null },
+            onPause = { pauseDownload() },
+            onResume = { startDownload() },
+            onCancelDownload = { cancelDownload() }
+        )
         return
     }
 
@@ -115,10 +207,12 @@ fun AppRoot() {
             when (selected) {
                 NavDest.Home -> WelcomePage(
                     playAnimation = !welcomeAnimated,
-                    onAnimationComplete = { welcomeAnimated = true }
+                    onAnimationComplete = { welcomeAnimated = true },
+                    updateCheckState = updateCheckState,
+                    onVersionClick = { startDownload() }
                 )
                 NavDest.Hardware -> HardwarePage()
-                NavDest.Exploit -> PlaceholderPage(NavDest.Exploit)
+                NavDest.Exploit -> ExploitPage()
                 NavDest.Settings -> SettingsPage()
                 NavDest.About -> AboutPage()
             }
@@ -132,6 +226,111 @@ fun AppRoot() {
                     .padding(bottom = 16.dp)
             )
         }
+    }
+    UpdateDialogs(
+        updateInfo = updateInfo,
+        showUpdateDialog = showUpdateDialog,
+        isDownloading = isDownloading,
+        isPaused = isPaused,
+        downloadProgress = downloadProgress,
+        downloadError = downloadError,
+        onConfirmDownload = { startDownload() },
+        onDismissUpdate = { showUpdateDialog = false },
+        onDismissError = { downloadError = null },
+        onPause = { pauseDownload() },
+        onResume = { startDownload() },
+        onCancelDownload = { cancelDownload() }
+    )
+}
+
+/// 集中渲染更新相关对话框：发现新版本、下载中/暂停、下载失败
+@Composable
+fun UpdateDialogs(
+    updateInfo: ReleaseInfo?,
+    showUpdateDialog: Boolean,
+    isDownloading: Boolean,
+    isPaused: Boolean,
+    downloadProgress: Float,
+    downloadError: String?,
+    onConfirmDownload: () -> Unit,
+    onDismissUpdate: () -> Unit,
+    onDismissError: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onCancelDownload: () -> Unit
+) {
+    if (showUpdateDialog && updateInfo != null) {
+        AlertDialog(
+            onDismissRequest = onDismissUpdate,
+            title = { Text(stringRes(R.string.update_available_title)) },
+            text = {
+                Text(stringRes(R.string.update_available_message_format, updateInfo.tagName))
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirmDownload) {
+                    Text(stringRes(R.string.update_btn_download))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUpdate) {
+                    Text(stringRes(R.string.update_btn_cancel))
+                }
+            }
+        )
+    }
+    if (isDownloading) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = {
+                Text(if (isPaused) stringRes(R.string.update_paused_title) else stringRes(R.string.update_downloading_title))
+            },
+            text = {
+                Column {
+                    // downloadProgress 为 -1f 表示服务端未返回 Content-Length，转为不确定模式
+                    val determined = downloadProgress >= 0f
+                    if (determined) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("${(downloadProgress * 100).toInt()}%")
+                    } else {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                if (isPaused) {
+                    TextButton(onClick = onResume) {
+                        Text(stringRes(R.string.update_btn_resume))
+                    }
+                } else {
+                    TextButton(onClick = onPause) {
+                        Text(stringRes(R.string.update_btn_pause))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelDownload) {
+                    Text(stringRes(R.string.update_btn_cancel))
+                }
+            }
+        )
+    }
+    if (downloadError != null) {
+        AlertDialog(
+            onDismissRequest = onDismissError,
+            title = { Text(stringRes(R.string.update_available_title)) },
+            text = {
+                Text(stringRes(R.string.update_download_error_format, downloadError))
+            },
+            confirmButton = {
+                TextButton(onClick = onDismissError) {
+                    Text(stringRes(R.string.update_btn_close))
+                }
+            }
+        )
     }
 }
 
@@ -160,14 +359,17 @@ fun rememberDeviceOwnerName(): String {
     }
 }
 
-/** 读取 Shizuku 版本号：从 PackageManager 读取 Shizuku 应用的 versionName */
+/** 读取 Shizuku 版本号：从 PackageManager 读取 Shizuku 应用的 versionName，仅保留 主.次.修订 */
 @Composable
 fun rememberShizukuVersion(): String {
     val context = LocalContext.current
     return remember {
         try {
             val pkgInfo = context.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0)
-            pkgInfo.versionName ?: "?"
+            // 形如 "13.6.0.r1086.2650830c" -> "13.6.0"
+            val raw = pkgInfo.versionName ?: return@remember "?"
+            val parts = raw.split('.')
+            if (parts.size >= 3) "${parts[0]}.${parts[1]}.${parts[2]}" else raw
         } catch (e: Exception) {
             "?"
         }
@@ -177,7 +379,9 @@ fun rememberShizukuVersion(): String {
 @Composable
 fun WelcomePage(
     playAnimation: Boolean,
-    onAnimationComplete: () -> Unit
+    onAnimationComplete: () -> Unit,
+    updateCheckState: UpdateCheckState = UpdateCheckState.CHECKING,
+    onVersionClick: () -> Unit = {}
 ) {
     val ownerName = rememberDeviceOwnerName()
     val fullText = stringRes(R.string.welcome_format, ownerName)
@@ -249,7 +453,9 @@ fun WelcomePage(
         // 背景区下方：一言名句（着色器底部云层已过渡到白色，留少量间距）
         HitokotoQuote(
             textColor = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 8.dp, start = 24.dp, end = 24.dp)
+            modifier = Modifier.padding(top = 8.dp, start = 24.dp, end = 24.dp),
+            updateCheckState = updateCheckState,
+            onVersionClick = onVersionClick
         )
     }
 }
@@ -258,7 +464,9 @@ fun WelcomePage(
 @Composable
 fun HitokotoQuote(
     textColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    updateCheckState: UpdateCheckState = UpdateCheckState.CHECKING,
+    onVersionClick: () -> Unit = {}
 ) {
     var quote by remember { mutableStateOf("") }
     var from by remember { mutableStateOf("") }
@@ -342,7 +550,7 @@ fun HitokotoQuote(
                 )
             }
         }
-        // 版本信息行：git 图标 + Version: x.x.x    shizuku 图标 + Shizuku:none（并列一行）
+        // 版本信息行：git 图标 + Version: x.x.x [更新状态图标]    shizuku 图标 + v版本号
         Spacer(Modifier.height(8.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -354,11 +562,27 @@ fun HitokotoQuote(
                 tint = textColor.copy(alpha = 0.6f),
                 modifier = Modifier.size(14.dp)
             )
-            Text(
-                text = "Version: $versionName",
-                color = textColor.copy(alpha = 0.6f),
-                fontSize = 11.sp
-            )
+            // 有新版本时版本名+状态图标整体可点击触发下载
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = if (updateCheckState == UpdateCheckState.AVAILABLE) {
+                    Modifier.clickable { onVersionClick() }
+                } else {
+                    Modifier
+                }
+            ) {
+                Text(
+                    text = "Ver: $versionName",
+                    color = textColor.copy(alpha = 0.6f),
+                    fontSize = 11.sp
+                )
+                UpdateStatusIcon(
+                    state = updateCheckState,
+                    tint = textColor.copy(alpha = 0.6f),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
             Spacer(Modifier.width(24.dp))
             Icon(
                 painter = painterResource(id = R.drawable.ic_shizuku),
@@ -370,6 +594,52 @@ fun HitokotoQuote(
                 text = "v${rememberShizukuVersion()}",
                 color = textColor.copy(alpha = 0.6f),
                 fontSize = 11.sp
+            )
+        }
+    }
+}
+
+/// 更新状态图标：CHECKING 旋转动画 / LATEST 对勾 / AVAILABLE 下载箭头
+@Composable
+fun UpdateStatusIcon(
+    state: UpdateCheckState,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    when (state) {
+        UpdateCheckState.CHECKING -> {
+            // 旋转动画表示正在后台检测
+            val transition = rememberInfiniteTransition(label = "update_checking")
+            val rotation by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 1000),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "update_checking_rotation"
+            )
+            Icon(
+                painter = painterResource(id = R.drawable.ic_update_checking),
+                contentDescription = null,
+                tint = tint,
+                modifier = modifier.rotate(rotation)
+            )
+        }
+        UpdateCheckState.LATEST -> {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_update_latest),
+                contentDescription = null,
+                tint = tint,
+                modifier = modifier
+            )
+        }
+        UpdateCheckState.AVAILABLE -> {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_update_available),
+                contentDescription = null,
+                tint = tint,
+                modifier = modifier
             )
         }
     }
