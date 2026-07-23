@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -105,10 +106,10 @@ fun ShizukuConnectionPage(
     }
 
     val statusText = when (shizukuState) {
-        ShizukuState.NOT_INSTALLED -> "Shizuku 未安装"
-        ShizukuState.NOT_RUNNING -> "Shizuku 服务未启动"
-        ShizukuState.NEED_PERMISSION -> "等待授权"
-        ShizukuState.READY -> "已连接"
+        ShizukuState.NOT_INSTALLED -> stringRes(R.string.shizuku_state_not_installed)
+        ShizukuState.NOT_RUNNING -> stringRes(R.string.shizuku_state_not_running)
+        ShizukuState.NEED_PERMISSION -> stringRes(R.string.shizuku_state_need_permission)
+        ShizukuState.READY -> stringRes(R.string.shizuku_state_ready)
     }
     val statusColor = if (shizukuState == ShizukuState.READY) Color(0xFF4CAF50) else Color(0xFFFF9800)
 
@@ -130,13 +131,13 @@ fun ShizukuConnectionPage(
             )
             Spacer(Modifier.height(24.dp))
             Text(
-                text = "需要连接 Shizuku",
+                text = stringRes(R.string.shizuku_need_connect),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "请先安装并启动 Shizuku 服务，然后授权本应用",
+                text = stringRes(R.string.shizuku_guide),
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center
@@ -144,72 +145,80 @@ fun ShizukuConnectionPage(
             Spacer(Modifier.height(16.dp))
             // 状态指示
             Text(
-                text = "当前状态：$statusText",
+                text = stringRes(R.string.shizuku_status_label) + statusText,
                 color = statusColor,
                 fontSize = 14.sp
             )
             Spacer(Modifier.height(32.dp))
 
-            // 按钮区
-            when (shizukuState) {
-                ShizukuState.NEED_PERMISSION -> {
-                    Button(
-                        onClick = {
-                            if (Shizuku.shouldShowRequestPermissionRationale()) {
-                                // 用户之前拒绝过，打开 Shizuku 应用详情页
-                                openShizukuAppSettings(context)
-                            } else {
-                                permissionRequesting = true
-                                Shizuku.requestPermission(0)
-                            }
-                        },
-                        enabled = !permissionRequesting,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text(if (permissionRequesting) "等待授权..." else "授权 Shizuku")
-                    }
-                }
-                ShizukuState.NOT_INSTALLED -> {
-                    Button(
-                        onClick = { openShizukuWebsite(context) },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text("获取 Shizuku")
-                    }
-                }
-                ShizukuState.NOT_RUNNING -> {
-                    Button(
-                        onClick = { openShizukuAppSettings(context) },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text("打开 Shizuku")
-                    }
-                }
-                ShizukuState.READY -> {
-                    // 已就绪会自动进入主程序，这里不显示按钮
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-            // 手动刷新按钮
-            Button(
-                onClick = { shizukuState = checkShizukuState(context) },
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // 按钮区：主按钮 + 重新检测按钮放在同一行
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("重新检测")
+                val btnAuthorize = stringRes(R.string.shizuku_btn_authorize)
+                val btnAuthorizing = stringRes(R.string.shizuku_btn_authorizing)
+                val btnGet = stringRes(R.string.shizuku_btn_get)
+                val btnOpen = stringRes(R.string.shizuku_btn_open)
+                val btnRecheck = stringRes(R.string.shizuku_btn_recheck)
+                when (shizukuState) {
+                    ShizukuState.NEED_PERMISSION -> {
+                        Button(
+                            onClick = {
+                                if (Shizuku.shouldShowRequestPermissionRationale()) {
+                                    // 用户之前拒绝过，打开 Shizuku 应用详情页
+                                    openShizukuAppSettings(context)
+                                } else {
+                                    permissionRequesting = true
+                                    Shizuku.requestPermission(0)
+                                }
+                            },
+                            enabled = !permissionRequesting,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(if (permissionRequesting) btnAuthorizing else btnAuthorize)
+                        }
+                    }
+                    ShizukuState.NOT_INSTALLED -> {
+                        Button(
+                            onClick = { openShizukuWebsite(context) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(btnGet)
+                        }
+                    }
+                    ShizukuState.NOT_RUNNING -> {
+                        Button(
+                            onClick = { openShizukuAppSettings(context) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(btnOpen)
+                        }
+                    }
+                    ShizukuState.READY -> {
+                        // 已就绪会自动进入主程序，这里不显示按钮
+                    }
+                }
+                // 手动刷新按钮
+                Button(
+                    onClick = { shizukuState = checkShizukuState(context) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                ) {
+                    Text(btnRecheck)
+                }
             }
         }
     }

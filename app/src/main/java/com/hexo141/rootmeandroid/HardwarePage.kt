@@ -46,16 +46,37 @@ fun HardwarePage() {
     var items by remember { mutableStateOf<List<HardwareItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
+    // 标签字符串：语言切换时自动重组
+    val labelBrand = stringRes(R.string.hardware_label_brand)
+    val labelCpu = stringRes(R.string.hardware_label_cpu)
+    val labelGpu = stringRes(R.string.hardware_label_gpu)
+    val labelKernel = stringRes(R.string.hardware_label_kernel)
+    val labelSelinux = stringRes(R.string.hardware_label_selinux)
+    val labelFingerprint = stringRes(R.string.hardware_label_fingerprint)
+    val coresFormat = stringRes(R.string.hardware_cores_format)
+    val unknownFreq = stringRes(R.string.hardware_unknown_freq)
+    val unknownStr = stringRes(R.string.hardware_unknown)
+
+    LaunchedEffect(labelBrand, coresFormat, unknownFreq, unknownStr) {
         loading = true
-        items = collectHardwareInfo()
+        items = collectHardwareInfo(
+            labelBrand = labelBrand,
+            labelCpu = labelCpu,
+            labelGpu = labelGpu,
+            labelKernel = labelKernel,
+            labelSelinux = labelSelinux,
+            labelFingerprint = labelFingerprint,
+            coresFormat = coresFormat,
+            unknownFreq = unknownFreq,
+            unknownStr = unknownStr
+        )
         loading = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (loading) {
             Text(
-                text = "读取硬件信息中...",
+                text = stringRes(R.string.hardware_loading),
                 modifier = Modifier.align(Alignment.Center),
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -113,31 +134,41 @@ private fun HardwareInfoCard(item: HardwareItem) {
 }
 
 /// 收集所有硬件信息（shell + Build）
-private fun collectHardwareInfo(): List<HardwareItem> {
+private fun collectHardwareInfo(
+    labelBrand: String,
+    labelCpu: String,
+    labelGpu: String,
+    labelKernel: String,
+    labelSelinux: String,
+    labelFingerprint: String,
+    coresFormat: String,
+    unknownFreq: String,
+    unknownStr: String
+): List<HardwareItem> {
     val result = mutableListOf<HardwareItem>()
 
     // 1. 品牌及型号
     result.add(
         HardwareItem(
-            label = "Brand / Model",
+            label = labelBrand,
             value = "${Build.BRAND} ${Build.MODEL}"
         )
     )
 
     // 2. CPU 信息
-    result.add(HardwareItem(label = "CPU", value = readCpuInfo()))
+    result.add(HardwareItem(label = labelCpu, value = readCpuInfo(coresFormat, unknownFreq, unknownStr)))
 
     // 3. GPU 信息（读 /sys/class/misc/mali0/device/gpu_model 或 dumpsys gfxinfo）
-    result.add(HardwareItem(label = "GPU", value = readGpuInfo()))
+    result.add(HardwareItem(label = labelGpu, value = readGpuInfo(unknownStr)))
 
     // 4. 内核信息
-    result.add(HardwareItem(label = "Kernel", value = readKernelInfo()))
+    result.add(HardwareItem(label = labelKernel, value = readKernelInfo(unknownStr)))
 
     // 5. SELinux 状态
-    result.add(HardwareItem(label = "SELinux", value = readSelinuxStatus()))
+    result.add(HardwareItem(label = labelSelinux, value = readSelinuxStatus(unknownStr)))
 
     // 6. 设备指纹
-    result.add(HardwareItem(label = "Fingerprint", value = Build.FINGERPRINT))
+    result.add(HardwareItem(label = labelFingerprint, value = Build.FINGERPRINT))
 
     return result
 }
@@ -156,15 +187,15 @@ private fun shizukuShell(cmd: String): String {
 }
 
 /// 读内核版本：优先 /proc/version，回退到 System.getProperty
-private fun readKernelInfo(): String {
+private fun readKernelInfo(unknownStr: String): String {
     val procVersion = shizukuShell("cat /proc/version").trim()
     if (procVersion.isNotEmpty()) return procVersion
     val osVer = System.getProperty("os.version") ?: ""
-    return if (osVer.isNotEmpty()) osVer else "unknown"
+    return if (osVer.isNotEmpty()) osVer else unknownStr
 }
 
 /// 读 CPU 信息：厂商 + 型号 + 核数 + 频率
-private fun readCpuInfo(): String {
+private fun readCpuInfo(coresFormat: String, unknownFreq: String, unknownStr: String): String {
     // 1. 厂商与型号：优先 getprop 的 SoC 属性（现代设备最可靠）
     val socManufacturer = shizukuShell("getprop ro.soc.manufacturer").trim()
     val socModel = shizukuShell("getprop ro.soc.model").trim()
@@ -185,7 +216,7 @@ private fun readCpuInfo(): String {
     } else if (platform.isNotEmpty()) {
         parts.add(platform)
     }
-    val brandStr = if (parts.isNotEmpty()) parts.joinToString(" ") else "unknown"
+    val brandStr = if (parts.isNotEmpty()) parts.joinToString(" ") else unknownStr
 
     // 2. 核数
     val cores = Runtime.getRuntime().availableProcessors()
@@ -195,15 +226,15 @@ private fun readCpuInfo(): String {
     val freqStr = if (maxFreq.isNotEmpty() && maxFreq.matches(Regex("\\d+"))) {
         "${maxFreq.toInt() / 1000} MHz"
     } else {
-        "unknown freq"
+        unknownFreq
     }
 
-    return "$brandStr\n$cores cores @ $freqStr"
+    return "$brandStr\n${coresFormat.format(cores, freqStr)}"
 }
 
 /// 读 GPU 信息：优先 dumpsys gfxinfo 的 GPU 字段，回退到 Build.SOFTWARE_CODENAME 等属性
 /// 不再使用 EGL/GL 上下文（容易在非 GL 线程失败）
-private fun readGpuInfo(): String {
+private fun readGpuInfo(unknownStr: String): String {
     // dumpsys SurfaceFlinger 中的 GLES 字段行（部分设备）
     val sfGpu = shizukuShell("dumpsys SurfaceFlinger 2>/dev/null | grep -i 'GLES:'").trim()
     if (sfGpu.isNotEmpty()) {
@@ -225,11 +256,11 @@ private fun readGpuInfo(): String {
     val parts = mutableListOf<String>()
     if (egl.isNotEmpty()) parts.add(egl)
     if (verStr.isNotEmpty()) parts.add("GLES $verStr")
-    return if (parts.isNotEmpty()) parts.joinToString(" ") else "unknown"
+    return if (parts.isNotEmpty()) parts.joinToString(" ") else unknownStr
 }
 
 /// 读 SELinux 状态：getenforce 返回 Enforcing / Permissive / Disabled
-private fun readSelinuxStatus(): String {
+private fun readSelinuxStatus(unknownStr: String): String {
     val status = shizukuShell("getenforce").trim()
-    return if (status.isNotEmpty()) status else "unknown"
+    return if (status.isNotEmpty()) status else unknownStr
 }

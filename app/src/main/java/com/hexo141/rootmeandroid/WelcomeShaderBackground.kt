@@ -305,9 +305,15 @@ void main() {
     vec2 uvScreen = fc / iResolution.xy;
     col *= 0.5 + 0.5 * pow(16.0 * uvScreen.x * uvScreen.y * (1.0 - uvScreen.x) * (1.0 - uvScreen.y), 0.2);
 
-    // ---- 底部云层过渡：复用背景函数算出的云层 alpha（bg.a），
-    // 让过渡边缘与画面里的云层形状一致，随云层一起流动 ----
-    float fadeAlpha = smoothstep(0.0, 0.2, uvScreen.y) * bg.a;
+    // ---- 底部云层过渡：复用 foreground() 第一层云的 fbm 流场，
+    // 与画面底部可见云层同速、同形（iTime*4），避免速度/颜色错位 ----
+    // foreground 第一层：uv.y-=0.2; uv2=uv+vec2(t/1.0+40.0, 0.0); h=(fbm-0.5)*1.7
+    vec2 cloudUv = uv - vec2(0.0, 0.2) + vec2(iTime * 4.0 + 40.0, 0.0);
+    float cloudH = (fbm(cloudUv, 8) - 0.5) * 1.7;
+    // 云层可见边缘 = cloudH - 0.02；将其映射到屏幕底部一带做羽化
+    // 加宽并抬高过渡带，让底部云层向下延伸遮住白色背景，再羽化消失
+    float edgeY = clamp(0.15 + cloudH * 0.12, 0.0, 0.32);
+    float fadeAlpha = smoothstep(edgeY - 0.08, edgeY + 0.08, uvScreen.y);
     col = mix(iBgColor, col, fadeAlpha);
 
     gl_FragColor = vec4(col, 1.0);

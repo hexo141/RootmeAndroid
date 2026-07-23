@@ -81,12 +81,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-enum class NavDest(val label: String, val iconRes: Int) {
-    Home("Home", R.drawable.ic_nav_home),
-    Hardware("Hardware", R.drawable.ic_nav_hardware),
-    Exploit("Exploit", R.drawable.ic_nav_exploit),
-    Settings("Settings", R.drawable.ic_nav_settings),
-    About("About", R.drawable.ic_nav_about)
+enum class NavDest(val labelRes: Int, val iconRes: Int) {
+    Home(R.string.nav_home, R.drawable.ic_nav_home),
+    Hardware(R.string.nav_hardware, R.drawable.ic_nav_hardware),
+    Exploit(R.string.nav_exploit, R.drawable.ic_nav_exploit),
+    Settings(R.string.nav_settings, R.drawable.ic_nav_settings),
+    About(R.string.nav_about, R.drawable.ic_nav_about)
 }
 
 @Composable
@@ -119,8 +119,8 @@ fun AppRoot() {
                 )
                 NavDest.Hardware -> HardwarePage()
                 NavDest.Exploit -> PlaceholderPage(NavDest.Exploit)
-                NavDest.Settings -> PlaceholderPage(NavDest.Settings)
-                NavDest.About -> PlaceholderPage(NavDest.About)
+                NavDest.Settings -> SettingsPage()
+                NavDest.About -> AboutPage()
             }
             DynamicIslandNavBar(
                 items = NavDest.entries.toList(),
@@ -142,7 +142,7 @@ fun PlaceholderPage(dest: NavDest) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = dest.label,
+            text = stringRes(dest.labelRes),
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onBackground
         )
@@ -160,15 +160,17 @@ fun rememberDeviceOwnerName(): String {
     }
 }
 
-/** 读取 Shizuku 版本号：通过 Shizuku API 获取，读不到回退到 "?" */
+/** 读取 Shizuku 版本号：从 PackageManager 读取 Shizuku 应用的 versionName */
 @Composable
 fun rememberShizukuVersion(): String {
+    val context = LocalContext.current
     return remember {
         try {
-            rikka.shizuku.Shizuku.getVersion()
+            val pkgInfo = context.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0)
+            pkgInfo.versionName ?: "?"
         } catch (e: Exception) {
             "?"
-        }.toString()
+        }
     }
 }
 
@@ -178,9 +180,9 @@ fun WelcomePage(
     onAnimationComplete: () -> Unit
 ) {
     val ownerName = rememberDeviceOwnerName()
-    val fullText = "Welcome, $ownerName"
+    val fullText = stringRes(R.string.welcome_format, ownerName)
     // playAnimation=true 时从 0 逐字打；false 时直接满
-    var typedCount by remember { mutableIntStateOf(if (playAnimation) 0 else fullText.length) }
+    var typedCount by remember(fullText) { mutableIntStateOf(if (playAnimation) 0 else fullText.length) }
 
     // 打字机：每 90ms 增加一个字符，到末尾后回调一次
     LaunchedEffect(playAnimation, fullText) {
@@ -210,12 +212,12 @@ fun WelcomePage(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         val pageBgColor = MaterialTheme.colorScheme.background
-        // 背景区：着色器 + 欢迎文字垂直居中
+        // 着色器背景在上：占据上半部分，底部云层向下延伸并过渡到白色背景
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.3f),
-            contentAlignment = Alignment.Center
+                .fillMaxHeight(0.42f),
+            contentAlignment = Alignment.TopCenter
         ) {
             WelcomeShaderBackground(
                 modifier = Modifier.fillMaxSize(),
@@ -223,7 +225,8 @@ fun WelcomePage(
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(top = 56.dp)
             ) {
                 val textShadow = Shadow(
                     color = Color.Black.copy(alpha = 0.55f),
@@ -243,10 +246,10 @@ fun WelcomePage(
                 )
             }
         }
-        // 背景区下方：一言名句
+        // 背景区下方：一言名句（着色器底部云层已过渡到白色，留少量间距）
         HitokotoQuote(
             textColor = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(top = 24.dp, start = 24.dp, end = 24.dp)
+            modifier = Modifier.padding(top = 8.dp, start = 24.dp, end = 24.dp)
         )
     }
 }
@@ -289,24 +292,55 @@ fun HitokotoQuote(
         }.getOrNull() ?: "unknown"
     }
 
+    // 打字机：fullText 改变（每次重新拉到一言）时重置并逐字打出
+    var typedCount by remember { mutableIntStateOf(0) }
+    val fullText = remember(quote, from) {
+        if (quote.isEmpty()) ""
+        else if (from.isNotEmpty()) "\"$quote\" —— $from"
+        else "\"$quote\""
+    }
+    LaunchedEffect(fullText) {
+        typedCount = 0
+        while (typedCount < fullText.length) {
+            delay(45)
+            typedCount++
+        }
+    }
+
+    // 光标 "_" 无限闪烁
+    val cursorTransition = rememberInfiniteTransition(label = "hitokoto_cursor")
+    val cursorAlpha by cursorTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "hitokoto_cursor_alpha"
+    )
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (quote.isNotEmpty()) {
-            Text(
-                text = "\"$quote\"",
-                color = textColor,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "—— $from",
-                color = textColor.copy(alpha = 0.6f),
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center
-            )
+        if (fullText.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = fullText.substring(0, typedCount.coerceAtMost(fullText.length)),
+                    color = textColor,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "_",
+                    color = textColor,
+                    fontSize = 15.sp,
+                    modifier = Modifier.alpha(cursorAlpha)
+                )
+            }
         }
         // 版本信息行：git 图标 + Version: x.x.x    shizuku 图标 + Shizuku:none（并列一行）
         Spacer(Modifier.height(8.dp))
@@ -333,7 +367,7 @@ fun HitokotoQuote(
                 modifier = Modifier.size(14.dp)
             )
             Text(
-                text = "Shizuku: v${rememberShizukuVersion()}",
+                text = "v${rememberShizukuVersion()}",
                 color = textColor.copy(alpha = 0.6f),
                 fontSize = 11.sp
             )
@@ -403,13 +437,14 @@ private fun NavItemView(
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center
     ) {
+        val labelText = stringRes(item.labelRes)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 painter = painterResource(id = item.iconRes),
-                contentDescription = item.label,
+                contentDescription = labelText,
                 tint = iconTint,
                 modifier = Modifier.size(22.dp)
             )
@@ -421,7 +456,7 @@ private fun NavItemView(
                 exit = fadeOut(animationSpec = tween(120))
             ) {
                 Text(
-                    text = item.label,
+                    text = labelText,
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold

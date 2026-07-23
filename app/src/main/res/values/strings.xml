@@ -1,3 +1,48 @@
 <resources>
     <string name="app_name">RootmeAndroid</string>
+
+    <!-- 导航栏 -->
+    <string name="nav_home">首页</string>
+    <string name="nav_hardware">硬件</string>
+    <string name="nav_exploit">漏洞</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_about">关于</string>
+
+    <!-- 欢迎页 -->
+    <string name="welcome_format">欢迎，%1$s</string>
+
+    <!-- 硬件页 -->
+    <string name="hardware_loading">读取硬件信息中...</string>
+    <string name="hardware_label_brand">品牌 / 型号</string>
+    <string name="hardware_label_cpu">CPU</string>
+    <string name="hardware_label_gpu">GPU</string>
+    <string name="hardware_label_kernel">内核</string>
+    <string name="hardware_label_selinux">SELinux</string>
+    <string name="hardware_label_fingerprint">设备指纹</string>
+    <string name="hardware_cores_format">%1$d 核 @ %2$s</string>
+    <string name="hardware_unknown_freq">未知频率</string>
+    <string name="hardware_unknown">未知</string>
+
+    <!-- 设置页 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_language">语言</string>
+    <string name="settings_language_zh">中文</string>
+    <string name="settings_language_en">English</string>
+
+    <!-- 关于页 -->
+    <string name="about_title">关于</string>
+
+    <!-- Shizuku 配对页 -->
+    <string name="shizuku_need_connect">需要连接 Shizuku</string>
+    <string name="shizuku_guide">请先安装并启动 Shizuku 服务，然后授权本应用</string>
+    <string name="shizuku_status_label">当前状态：</string>
+    <string name="shizuku_state_not_installed">Shizuku 未安装</string>
+    <string name="shizuku_state_not_running">Shizuku 服务未启动</string>
+    <string name="shizuku_state_need_permission">等待授权</string>
+    <string name="shizuku_state_ready">已连接</string>
+    <string name="shizuku_btn_authorize">授权 Shizuku</string>
+    <string name="shizuku_btn_authorizing">等待授权...</string>
+    <string name="shizuku_btn_get">获取 Shizuku</string>
+    <string name="shizuku_btn_open">打开 Shizuku</string>
+    <string name="shizuku_btn_recheck">重新检测</string>
 </resources>
