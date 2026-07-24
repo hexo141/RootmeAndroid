@@ -33,40 +33,24 @@ jobs:
         echo "DATE=$DATE" >> $GITHUB_ENV
         echo "VERSION=v$DATE" >> $GITHUB_ENV
 
-    # 2. 解码签名密钥库（从 GitHub Secrets 读取 base64 编码的 keystore）
-    - name: Decode Keystore
-      env:
-        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      run: |
-        # 将 base64 密钥库解码为 .jks 文件
-        echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/keystore.jks"
-        # 将签名信息写入 gradle 属性文件，避免敏感信息出现在命令行
-        echo "RELEASE_STORE_FILE=$RUNNER_TEMP/keystore.jks" >> $GITHUB_ENV
-        echo "RELEASE_STORE_PASSWORD=$KEYSTORE_PASSWORD" >> $GITHUB_ENV
-        echo "RELEASE_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
-        echo "RELEASE_KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
-
-    # 3. Build Release APK（带签名）
+    # 2. 构建 Release APK（未签名）
     - name: Build Release APK
       run: ./gradlew assembleRelease
+
+    # 3. 使用 r0adkll/sign-android-release 对 APK 签名
+    - name: Sign APK
+      id: sign_app
+      uses: r0adkll/sign-android-release@v1
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
       env:
-        RELEASE_STORE_FILE: ${{ env.RELEASE_STORE_FILE }}
-        RELEASE_STORE_PASSWORD: ${{ env.RELEASE_STORE_PASSWORD }}
-        RELEASE_KEY_ALIAS: ${{ env.RELEASE_KEY_ALIAS }}
-        RELEASE_KEY_PASSWORD: ${{ env.RELEASE_KEY_PASSWORD }}
+        BUILD_TOOLS_VERSION: "34.0.0"
 
-    # 4. 将生成的 APK 重命名为 v年月日.apk
-    - name: Rename APK
-      run: |
-        APK_DIR=app/build/outputs/apk/release
-        find "$APK_DIR" -name "*.apk" -exec mv {} "$APK_DIR/$VERSION.apk" \;
-        echo "重命名完成，当前文件列表:"
-        ls -la "$APK_DIR/"
-
-    # 5. 创建 GitHub Release 并上传已签名的 APK
+    # 4. 创建 GitHub Release 并上传已签名的 APK
     - name: Create GitHub Release and Upload Assets
       if: github.event_name == 'push'
       uses: softprops/action-gh-release@v2
@@ -75,6 +59,6 @@ jobs:
         name: ${{ env.VERSION }}
         generate_release_notes: true
         files: |
-          app/build/outputs/apk/release/${{ env.VERSION }}.apk
+          ${{ steps.sign_app.outputs.signedReleaseFile }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
