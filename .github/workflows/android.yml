@@ -50,7 +50,14 @@ jobs:
       env:
         BUILD_TOOLS_VERSION: "34.0.0"
 
-    # 4. 创建 GitHub Release 并上传已签名的 APK
+    # 4. 将签名后的 APK 重命名为 v年月日.apk
+    - name: Rename APK
+      run: |
+        mv ${{ steps.sign_app.outputs.signedReleaseFile }} app/build/outputs/apk/release/$VERSION.apk
+        echo "重命名完成，当前文件列表:"
+        ls -la app/build/outputs/apk/release/
+
+    # 5. 创建 GitHub Release 并上传已签名的 APK
     - name: Create GitHub Release and Upload Assets
       if: github.event_name == 'push'
       uses: softprops/action-gh-release@v2
@@ -59,6 +66,6 @@ jobs:
         name: ${{ env.VERSION }}
         generate_release_notes: true
         files: |
-          ${{ steps.sign_app.outputs.signedReleaseFile }}
+          app/build/outputs/apk/release/${{ env.VERSION }}.apk
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
