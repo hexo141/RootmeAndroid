@@ -199,23 +199,29 @@ fun AppRoot() {
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when (selected) {
-                NavDest.Home -> WelcomePage(
-                    playAnimation = !welcomeAnimated,
-                    onAnimationComplete = { welcomeAnimated = true },
-                    updateCheckState = updateCheckState,
-                    onVersionClick = { startDownload() }
-                )
-                NavDest.Hardware -> HardwarePage()
-                NavDest.Exploit -> ExploitPage()
-                NavDest.Settings -> SettingsPage()
-                NavDest.About -> AboutPage()
+        // 外层 Box 不应用 innerPadding，让导航栏独立处理底部 inset，避免
+        // 依赖 Scaffold innerPadding 导致的定位不稳问题
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 页面内容：尊重 Scaffold 的 innerPadding（状态栏 + 导航栏）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                when (selected) {
+                    NavDest.Home -> WelcomePage(
+                        playAnimation = !welcomeAnimated,
+                        onAnimationComplete = { welcomeAnimated = true },
+                        updateCheckState = updateCheckState,
+                        onVersionClick = { startDownload() }
+                    )
+                    NavDest.Hardware -> HardwarePage()
+                    NavDest.Exploit -> ExploitPage()
+                    NavDest.Settings -> SettingsPage()
+                    NavDest.About -> AboutPage()
+                }
             }
+            // 浮动导航栏：直接读取系统导航栏 inset，不依赖 innerPadding
             DynamicIslandNavBar(
                 items = NavDest.entries.toList(),
                 selected = selected,
