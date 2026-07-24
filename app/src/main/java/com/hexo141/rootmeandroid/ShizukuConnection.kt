@@ -172,7 +172,6 @@ fun ShizukuConnectionPage(
                 val btnAuthorizing = stringRes(R.string.shizuku_btn_authorizing)
                 val btnGet = stringRes(R.string.shizuku_btn_get)
                 val btnOpen = stringRes(R.string.shizuku_btn_open)
-                val btnRecheck = stringRes(R.string.shizuku_btn_recheck)
                 when (shizukuState) {
                     ShizukuState.NEED_PERMISSION -> {
                         Button(
@@ -219,17 +218,6 @@ fun ShizukuConnectionPage(
                     ShizukuState.READY -> {
                         // 已就绪会自动进入主程序，这里不显示按钮
                     }
-                }
-                // 手动刷新按钮
-                Button(
-                    onClick = { shizukuState = checkShizukuState(context) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                ) {
-                    Text(btnRecheck)
                 }
             }
         }

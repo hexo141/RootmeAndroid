@@ -9,7 +9,8 @@
     <string name="nav_about">About</string>
 
     <!-- Welcome -->
-    <string name="welcome_format">Welcome, %1$s</string>
+    <string name="welcome_text">Welcome!</string>
+    <string name="welcome_subtitle">Starward, Abyss-bound</string>
 
     <!-- Hardware -->
     <string name="hardware_loading">Loading hardware info...</string>
@@ -28,6 +29,8 @@
     <string name="settings_language">Language</string>
     <string name="settings_language_zh">中文</string>
     <string name="settings_language_en">English</string>
+    <string name="settings_scale">UI Scale</string>
+    <string name="settings_scale_reset">Reset</string>
 
     <!-- About -->
     <string name="about_title">About</string>

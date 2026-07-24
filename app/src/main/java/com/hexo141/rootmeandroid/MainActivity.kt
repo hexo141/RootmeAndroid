@@ -7,15 +7,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -40,6 +40,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -58,13 +59,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.provider.Settings as SystemSettings
 import com.hexo141.rootmeandroid.ui.theme.RootmeAndroidTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -118,6 +120,14 @@ fun AppRoot() {
     var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
+
+    // UI 缩放
+    val scale = ScaleManager.current
+    val baseDensity = LocalDensity.current
+    val scaledDensity = Density(
+        density = baseDensity.density * scale,
+        fontScale = baseDensity.fontScale * scale
+    )
 
     // 启动时后台请求 GitHub latest release
     LaunchedEffect(Unit) {
@@ -173,8 +183,79 @@ fun AppRoot() {
         updateInfo?.let { File(context.cacheDir, it.apkName).delete() }
     }
 
-    if (!shizukuReady) {
-        ShizukuConnectionPage(onConnected = { shizukuReady = true })
+    CompositionLocalProvider(LocalDensity provides scaledDensity) {
+        if (!shizukuReady) {
+            ShizukuConnectionPage(onConnected = { shizukuReady = true })
+            UpdateDialogs(
+                updateInfo = updateInfo,
+                showUpdateDialog = showUpdateDialog,
+                isDownloading = isDownloading,
+                isPaused = isPaused,
+                downloadProgress = downloadProgress,
+                downloadError = downloadError,
+                onConfirmDownload = { startDownload() },
+                onDismissUpdate = { showUpdateDialog = false },
+                onDismissError = { downloadError = null },
+                onPause = { pauseDownload() },
+                onResume = { startDownload() },
+                onCancelDownload = { cancelDownload() }
+            )
+            return@CompositionLocalProvider
+        }
+
+        // 导航栏首次进入：从屏幕外上滑入，后续直接显示
+        var navBarShown by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(Unit) { navBarShown = true }
+
+        var selected by remember { mutableStateOf(NavDest.Home) }
+        // 仅首次进入 app 播放打字机动画；之后切回 Home 显示静态完整文本
+        var welcomeAnimated by rememberSaveable { mutableStateOf(false) }
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.background
+        ) { innerPadding ->
+            // 外层 Box 不应用 innerPadding，让导航栏独立处理底部 inset，避免
+            // 依赖 Scaffold innerPadding 导致的定位不稳问题
+            Box(modifier = Modifier.fillMaxSize()) {
+                // 页面内容：尊重 Scaffold 的 innerPadding（状态栏 + 导航栏）
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    when (selected) {
+                        NavDest.Home -> WelcomePage(
+                            playAnimation = !welcomeAnimated,
+                            onAnimationComplete = { welcomeAnimated = true },
+                            updateCheckState = updateCheckState,
+                            onVersionClick = { startDownload() }
+                        )
+                        NavDest.Hardware -> HardwarePage()
+                        NavDest.Exploit -> ExploitPage()
+                        NavDest.Settings -> SettingsPage()
+                        NavDest.About -> AboutPage()
+                    }
+                }
+                // 浮动导航栏：首次进入从屏幕外上滑入
+                AnimatedVisibility(
+                    visible = navBarShown,
+                    enter = slideInVertically(
+                        initialOffsetY = { fullHeight -> fullHeight },
+                        animationSpec = tween(durationMillis = 400)
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 16.dp)
+                ) {
+                    DynamicIslandNavBar(
+                        items = NavDest.entries.toList(),
+                        selected = selected,
+                        onSelect = { selected = it }
+                    )
+                }
+            }
+        }
         UpdateDialogs(
             updateInfo = updateInfo,
             showUpdateDialog = showUpdateDialog,
@@ -189,64 +270,7 @@ fun AppRoot() {
             onResume = { startDownload() },
             onCancelDownload = { cancelDownload() }
         )
-        return
     }
-
-    var selected by remember { mutableStateOf(NavDest.Home) }
-    // 仅首次进入 app 播放打字机动画；之后切回 Home 显示静态完整文本
-    var welcomeAnimated by rememberSaveable { mutableStateOf(false) }
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-        // 外层 Box 不应用 innerPadding，让导航栏独立处理底部 inset，避免
-        // 依赖 Scaffold innerPadding 导致的定位不稳问题
-        Box(modifier = Modifier.fillMaxSize()) {
-            // 页面内容：尊重 Scaffold 的 innerPadding（状态栏 + 导航栏）
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                when (selected) {
-                    NavDest.Home -> WelcomePage(
-                        playAnimation = !welcomeAnimated,
-                        onAnimationComplete = { welcomeAnimated = true },
-                        updateCheckState = updateCheckState,
-                        onVersionClick = { startDownload() }
-                    )
-                    NavDest.Hardware -> HardwarePage()
-                    NavDest.Exploit -> ExploitPage()
-                    NavDest.Settings -> SettingsPage()
-                    NavDest.About -> AboutPage()
-                }
-            }
-            // 浮动导航栏：直接读取系统导航栏 inset，不依赖 innerPadding
-            DynamicIslandNavBar(
-                items = NavDest.entries.toList(),
-                selected = selected,
-                onSelect = { selected = it },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 16.dp)
-            )
-        }
-    }
-    UpdateDialogs(
-        updateInfo = updateInfo,
-        showUpdateDialog = showUpdateDialog,
-        isDownloading = isDownloading,
-        isPaused = isPaused,
-        downloadProgress = downloadProgress,
-        downloadError = downloadError,
-        onConfirmDownload = { startDownload() },
-        onDismissUpdate = { showUpdateDialog = false },
-        onDismissError = { downloadError = null },
-        onPause = { pauseDownload() },
-        onResume = { startDownload() },
-        onCancelDownload = { cancelDownload() }
-    )
 }
 
 /// 集中渲染更新相关对话框：发现新版本、下载中/暂停、下载失败
@@ -354,17 +378,6 @@ fun PlaceholderPage(dest: NavDest) {
     }
 }
 
-/** 读取设备机主名：读 device_name，读不到回退到 "User" */
-@Composable
-fun rememberDeviceOwnerName(): String {
-    val context = LocalContext.current
-    return remember {
-        val resolver = context.contentResolver
-        val deviceName = SystemSettings.Global.getString(resolver, "device_name")
-        if (!deviceName.isNullOrBlank()) deviceName else "User"
-    }
-}
-
 /** 读取 Shizuku 版本号：从 PackageManager 读取 Shizuku 应用的 versionName，仅保留 主.次.修订 */
 @Composable
 fun rememberShizukuVersion(): String {
@@ -389,18 +402,43 @@ fun WelcomePage(
     updateCheckState: UpdateCheckState = UpdateCheckState.CHECKING,
     onVersionClick: () -> Unit = {}
 ) {
-    val ownerName = rememberDeviceOwnerName()
-    val fullText = stringRes(R.string.welcome_format, ownerName)
-    // playAnimation=true 时从 0 逐字打；false 时直接满
-    var typedCount by remember(fullText) { mutableIntStateOf(if (playAnimation) 0 else fullText.length) }
+    val initialText = stringRes(R.string.welcome_text)
+    val subtitleText = stringRes(R.string.welcome_subtitle)
 
-    // 打字机：每 90ms 增加一个字符，到末尾后回调一次
-    LaunchedEffect(playAnimation, fullText) {
+    // 阶段：0=打字 initialText, 1=删除 initialText, 2=打字 subtitleText, 3=完成
+    var phase by remember { mutableIntStateOf(if (playAnimation) 0 else 3) }
+    var typedCount by remember { mutableIntStateOf(if (playAnimation) 0 else subtitleText.length) }
+    val currentText = if (phase <= 1) initialText else subtitleText
+
+    // 三阶段打字机：先打出 initialText → 逐字删除 → 再打出 subtitleText
+    LaunchedEffect(playAnimation) {
         if (playAnimation) {
-            while (typedCount < fullText.length) {
+            // 阶段 0：逐字打出 initialText
+            phase = 0
+            typedCount = 0
+            while (typedCount < initialText.length) {
                 delay(90)
                 typedCount++
             }
+            delay(600)
+
+            // 阶段 1：逐字删除 initialText
+            phase = 1
+            while (typedCount > 0) {
+                delay(50)
+                typedCount--
+            }
+            delay(300)
+
+            // 阶段 2：逐字打出 subtitleText
+            phase = 2
+            typedCount = 0
+            while (typedCount < subtitleText.length) {
+                delay(90)
+                typedCount++
+            }
+
+            phase = 3
             onAnimationComplete()
         }
     }
@@ -427,7 +465,7 @@ fun WelcomePage(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.42f),
-            contentAlignment = Alignment.TopCenter
+            contentAlignment = Alignment.Center
         ) {
             WelcomeShaderBackground(
                 modifier = Modifier.fillMaxSize(),
@@ -435,8 +473,7 @@ fun WelcomePage(
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(top = 56.dp)
+                horizontalArrangement = Arrangement.Center
             ) {
                 val textShadow = Shadow(
                     color = Color.Black.copy(alpha = 0.55f),
@@ -444,7 +481,7 @@ fun WelcomePage(
                     blurRadius = 6f
                 )
                 Text(
-                    text = fullText.substring(0, typedCount),
+                    text = currentText.substring(0, typedCount.coerceAtMost(currentText.length)),
                     style = MaterialTheme.typography.headlineMedium.copy(shadow = textShadow),
                     color = Color(0xFFFFF5E6)
                 )
@@ -687,15 +724,15 @@ private fun NavItemView(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // tween for colors is smoother & cheaper than spring (no overshoot, single interp)
+    // LinearEasing = uniform speed, no spring-like overshoot
     val bgColor by animateColorAsState(
         targetValue = if (isSelected) Color.White.copy(alpha = 0.14f) else Color.Transparent,
-        animationSpec = tween(durationMillis = 220),
+        animationSpec = tween(durationMillis = 220, easing = LinearEasing),
         label = "nav_bg"
     )
     val iconTint by animateColorAsState(
         targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.55f),
-        animationSpec = tween(durationMillis = 220),
+        animationSpec = tween(durationMillis = 220, easing = LinearEasing),
         label = "nav_tint"
     )
     Box(
@@ -704,10 +741,7 @@ private fun NavItemView(
             .clip(RoundedCornerShape(22.dp))
             .background(bgColor)
             .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
+                animationSpec = tween(durationMillis = 220, easing = LinearEasing)
             )
             .clickable { onClick() }
             .padding(horizontal = 14.dp),

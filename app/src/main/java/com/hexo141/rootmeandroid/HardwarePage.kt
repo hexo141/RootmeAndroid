@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -167,10 +168,17 @@ private fun collectHardwareInfo(
     return result
 }
 
-/// 以 shell 身份执行命令，返回 stdout
+/// 通过 Shizuku 以 shell 身份执行命令，返回 stdout
 private fun shizukuShell(cmd: String): String {
     return try {
-        val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+        val method = Shizuku::class.java.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java,
+            Array<String>::class.java,
+            String::class.java
+        )
+        method.isAccessible = true
+        val process = method.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process
         val out = BufferedReader(InputStreamReader(process.inputStream)).readText()
         process.waitFor()
         out
